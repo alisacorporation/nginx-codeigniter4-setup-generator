@@ -15,6 +15,23 @@ LOG_DIR="/var/log/nginx/$DOMAIN_NAME"
 # Get the real user who initiated the script
 REAL_USER=$(ps -o user= -p $PPID)
 
+# Make sure we have general nginx directory to working with
+if [ ! -d "/etc/nginx" ]; then
+  echo "Directory '/etc/nginx' does not exist. Make sure you have installed nginx!"
+  exit 1;
+fi
+
+if [ ! -d "/etc/nginx/vhost" ]; then
+  sudo mkdir /etc/nginx/vhost
+
+  if [ ! -d "/etc/nginx/vhost" ]; then
+    echo "Creating directory failed '/etc/nginx/vhost'"
+    exit 1
+  else
+    echo "Created directory '/etc/nginx/vhost'"
+  fi
+fi
+
 # Check if the script is run as superuser
 if [ "$EUID" -ne 0 ]; then
 	echo "Please run the script with superuser privileges."
