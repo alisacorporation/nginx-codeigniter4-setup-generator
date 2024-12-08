@@ -7,30 +7,15 @@
 
 # Variables
 PROJECT_NAME=$1
-DOMAIN_NAME="${PROJECT_NAME}.test"
+SKIP_SSL=${2:-false}
+DOMAIN_NAME="${PROJECT_NAME}"
+VHOST_DIR="/etc/nginx/vhost"
 PROJECT_DIR="/var/www/html/$DOMAIN_NAME"
 NGINX_VHOST="/etc/nginx/vhost/$DOMAIN_NAME.conf"
 LOG_DIR="/var/log/nginx/$DOMAIN_NAME"
 
 # Get the real user who initiated the script
 REAL_USER=$(ps -o user= -p $PPID)
-
-# Make sure we have general nginx directory to working with
-if [ ! -d "/etc/nginx" ]; then
-  echo "Directory '/etc/nginx' does not exist. Make sure you have installed nginx!"
-  exit 1;
-fi
-
-if [ ! -d "/etc/nginx/vhost" ]; then
-  sudo mkdir /etc/nginx/vhost
-
-  if [ ! -d "/etc/nginx/vhost" ]; then
-    echo "Creating directory failed '/etc/nginx/vhost'"
-    exit 1
-  else
-    echo "Created directory '/etc/nginx/vhost'"
-  fi
-fi
 
 # Check if the script is run as superuser
 if [ "$EUID" -ne 0 ]; then
@@ -44,10 +29,33 @@ if [ -z "$PROJECT_NAME" ]; then
 	exit 1
 fi
 
+# Make sure we have general nginx directory to working with
+if [ ! -d "/etc/nginx" ]; then
+  echo "Directory '/etc/nginx' does not exist. Make sure you have installed nginx!"
+  exit 1;
+fi
+
+# Function to create directory if it doesn't exist
+create_dir() {
+  local dir_path=$1
+  if [ ! -d "$dir_path" ]; then
+    sudo mkdir -p "$dir_path"
+    if [ ! -d "$dir_path" ]; then
+      echo "Failed to create directory: '$dir_path'"
+      exit 1
+    else
+      echo "Created directory: '$dir_path'"
+    fi
+  fi
+}
+
 # Create project and log directories
 echo "Creating directories..."
-sudo mkdir -p $PROJECT_DIR
-sudo mkdir -p $LOG_DIR
+
+# Create both directories
+create_dir "$VHOST_DIR"
+create_dir "$PROJECT_DIR"
+create_dir "$LOG_DIR"
 
 # Create NGINX virtual host file using touch
 sudo touch "$NGINX_VHOST" || {
@@ -117,9 +125,13 @@ server {
 EOL
 
 # Generate SSL certificate using OpenSSL (Self-Signed)
-echo "Generating SSL certificate..."
-sudo mkdir -p /etc/nginx/ssl
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 -keyout /etc/nginx/ssl/$DOMAIN_NAME.key -out /etc/nginx/ssl/$DOMAIN_NAME.crt -subj "/CN=$DOMAIN_NAME"
+if [ "$SKIP_SSL" != "true" ]; then
+    echo "Generating SSL certificate..."
+    sudo mkdir -p /etc/nginx/ssl
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 -keyout /etc/nginx/ssl/"$DOMAIN_NAME".key -out /etc/nginx/ssl/"$DOMAIN_NAME".crt -subj "/CN=$DOMAIN_NAME"
+else
+    echo "Skipping SSL certificate generation..."
+fi
 
 # Paths to environment files
 ENV_FILE="$PROJECT_DIR/env"
@@ -151,5 +163,14 @@ sudo systemctl reload nginx
 echo "Project $PROJECT_NAME created successfully and accessible at https://$DOMAIN_NAME"
 
 # Change ownership and permissions of the project directory
-sudo chown -R $REAL_USER:$REAL_USER $PROJECT_DIR
-sudo chmod -R 777 $PROJECT_DIR/writable
+sudo chown -R "$REAL_USER":"$REAL_USER" "$PROJECT_DIR"
+sudo chmod -R 777 "$PROJECT_DIR"/writable
+
+# Test Nginx configuration and reload if valid
+if sudo nginx -t; then
+    echo "Configuration valid. Reloading NGINX..."
+    sudo systemctl reload nginx
+else
+    echo "Configuration test failed. Fix errors before reloading."
+    exit 1
+fi
