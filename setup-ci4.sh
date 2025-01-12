@@ -65,7 +65,7 @@ sudo touch "$NGINX_VHOST" || {
 
 # Download CodeIgniter 4 (if you have a ready archive)
 echo "Downloading CodeIgniter..."
-wget https://api.github.com/repos/codeigniter4/framework/zipball/v4.5.5 -O /tmp/codeigniter.zip
+wget https://api.github.com/repos/codeigniter4/framework/zipball/v4.5.7 -O /tmp/codeigniter.zip
 unzip /tmp/codeigniter.zip -d /tmp/codeigniter
 
 # Find the extracted directory (with the name codeigniter4-framework-XXXX)
